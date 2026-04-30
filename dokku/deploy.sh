@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # deploy.sh — One-click Dokku deploy
 # Copy this file into your project, then:
-#   ./deploy.sh                    # auto domain, no SSL
-#   ./deploy.sh --ssl              # auto domain + SSL
-#   ./deploy.sh --domain app.example.com --ssl
+#   ./deploy.sh                          # auto domain + auto SSL (default)
+#   ./deploy.sh --no-ssl                 # auto domain, HTTP only
+#   ./deploy.sh --domain app.example.com # custom domain + SSL
+#   ./deploy.sh --domain app.com --no-ssl
 #
 # What it does:
 #   1. Detect app name (folder name)
 #   2. Create Dokku app
-#   3. Set domain (auto: <app>.hayai.my.id or custom)
-#   4. Setup Let's Encrypt SSL (if --ssl)
+#   3. Set domain (auto: <app>.hayai.my.id or custom via --domain)
+#   4. Setup Let's Encrypt SSL (default ON, skip with --no-ssl)
 #   5. Init git + push to Dokku
 
 set -euo pipefail
@@ -22,22 +23,28 @@ SSL_EMAIL="admin@hayai.my.id"
 
 # === Parse Args ===
 CUSTOM_DOMAIN=""
-DO_SSL=false
+DO_SSL=true   # <-- SSL ON by default
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --domain) CUSTOM_DOMAIN="$2"; shift 2 ;;
-    --ssl)    DO_SSL=true; shift ;;
+    --no-ssl) DO_SSL=false; shift ;;
     --host)   DOKKU_HOST="$2"; shift 2 ;;
     -h|--help)
-      echo "Usage: $0 [--domain example.com] [--ssl] [--host HOST]"
+      echo "Usage: $0 [OPTIONS]"
       echo ""
       echo "One-click deploy current project to Dokku."
+      echo "SSL is ON by default."
       echo ""
       echo "Options:"
-      echo "  --domain    Custom domain (default: <app>.hayai.my.id)"
-      echo "  --ssl       Enable Let's Encrypt SSL"
-      echo "  --host      Dokku server host (default: localhost)"
+      echo "  --domain <d>  Custom domain (default: <app>.hayai.my.id)"
+      echo "  --no-ssl      Disable Let's Encrypt SSL"
+      echo "  --host <h>    Dokku server host (default: localhost)"
+      echo ""
+      echo "Examples:"
+      echo "  $0                           # auto domain + SSL"
+      echo "  $0 --no-ssl                  # auto domain, HTTP only"
+      echo "  $0 --domain app.example.com  # custom domain + SSL"
       exit 0
       ;;
     *) echo "Unknown: $1"; exit 1 ;;
@@ -51,6 +58,7 @@ echo "  Dokku One-Click Deploy"
 echo "========================================"
 echo "App:      $APP_NAME"
 echo "Host:     $DOKKU_HOST"
+echo "SSL:      $($DO_SSL && echo 'ON (default)' || echo 'OFF (--no-ssl)')"
 
 # === Ensure Dockerfile Exists ===
 if [[ ! -f Dockerfile ]]; then
@@ -92,10 +100,10 @@ if $DO_SSL; then
   sudo dokku letsencrypt:set "$APP_NAME" email "$SSL_EMAIL" 2>/dev/null || true
   sudo dokku letsencrypt:enable "$APP_NAME" 2>/dev/null || true
   sudo dokku letsencrypt:cron-job --add 2>/dev/null || true
-  echo "  ✓ SSL enabled"
+  echo "  ✓ SSL enabled (Let's Encrypt)"
   PROTO="https"
 else
-  echo "  ⚠ SSL skipped (use --ssl)"
+  echo "  ⚠ SSL skipped (--no-ssl)"
   PROTO="http"
 fi
 
