@@ -65,13 +65,14 @@ fi
 echo ""
 echo "[3/4] Setting up SSL..."
 if [[ -n "$SSL_EMAIL" ]]; then
-  # Install letsencrypt plugin if not present
-  sudo dokku plugin:list 2>/dev/null | grep -q letsencrypt || \
-    sudo dokku plugin:install https://github.com/dokku/dokku-letsencrypt.git
+  # Install letsencrypt plugin if not present (idempotent)
+  if ! sudo dokku plugin:list 2>/dev/null | grep -qw letsencrypt; then
+    sudo dokku plugin:install https://github.com/dokku/dokku-letsencrypt.git 2>/dev/null || true
+  fi
 
   sudo dokku letsencrypt:set "$APP_NAME" email "$SSL_EMAIL"
   sudo dokku letsencrypt:enable "$APP_NAME"
-  sudo dokku letsencrypt:cron-job --add
+  sudo dokku letsencrypt:cron-job --add 2>/dev/null || true
   echo "  ✓ SSL enabled for $DOMAIN"
   PROTO="https"
 else
