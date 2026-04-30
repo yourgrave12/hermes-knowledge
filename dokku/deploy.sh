@@ -23,11 +23,13 @@ SSL_EMAIL="admin@hayai.my.id"
 
 # === Parse Args ===
 CUSTOM_DOMAIN=""
+CUSTOM_NAME=""
 DO_SSL=true   # <-- SSL ON by default
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --domain) CUSTOM_DOMAIN="$2"; shift 2 ;;
+    --name)   CUSTOM_NAME="$2"; shift 2 ;;
     --no-ssl) DO_SSL=false; shift ;;
     --host)   DOKKU_HOST="$2"; shift 2 ;;
     -h|--help)
@@ -37,14 +39,16 @@ while [[ $# -gt 0 ]]; do
       echo "SSL is ON by default."
       echo ""
       echo "Options:"
+      echo "  --name <n>    App name (default: folder name)"
       echo "  --domain <d>  Custom domain (default: <app>.hayai.my.id)"
       echo "  --no-ssl      Disable Let's Encrypt SSL"
       echo "  --host <h>    Dokku server host (default: localhost)"
       echo ""
       echo "Examples:"
-      echo "  $0                           # auto domain + SSL"
-      echo "  $0 --no-ssl                  # auto domain, HTTP only"
-      echo "  $0 --domain app.example.com  # custom domain + SSL"
+      echo "  $0                              # auto name + domain + SSL"
+      echo "  $0 --name my-app-v2             # override app name"
+      echo "  $0 --no-ssl                     # auto domain, HTTP only"
+      echo "  $0 --domain app.example.com     # custom domain + SSL"
       exit 0
       ;;
     *) echo "Unknown: $1"; exit 1 ;;
@@ -52,7 +56,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 # === Detect App Name ===
-APP_NAME=$(basename "$(pwd)")
+if [[ -n "$CUSTOM_NAME" ]]; then
+  APP_NAME="$CUSTOM_NAME"
+else
+  APP_NAME=$(basename "$(pwd)")
+fi
 echo "========================================"
 echo "  Dokku One-Click Deploy"
 echo "========================================"
@@ -77,7 +85,17 @@ export GIT_SSH_COMMAND="ssh -i $DOKKU_SSH_KEY -o IdentitiesOnly=yes -o StrictHos
 # === [1/5] Create App ===
 echo ""
 echo "[1/5] Creating Dokku app..."
-sudo dokku apps:create "$APP_NAME" 2>/dev/null && echo "  ✓ Created" || echo "  ⚠ Already exists"
+if sudo dokku apps:create "$APP_NAME" 2>/dev/null; then
+  echo "  ✓ Created"
+else
+  EXISTING_DOMAIN=$(sudo dokku domains:report "$APP_NAME" 2>/dev/null | grep "Domains app vhosts:" | awk '{print $NF}')
+  echo "  ⚠ App '$APP_NAME' already exists!"
+  echo "  ⚠ Domain: $EXISTING_DOMAIN"
+  echo "  ⚠ This deploy will OVERWRITE the existing app."
+  echo ""
+  read -rp "  Continue? [y/N] " CONFIRM
+  [[ "$CONFIRM" =~ ^[Yy]$ ]] || { echo "  ✗ Aborted."; exit 0; }
+fi
 
 # === [2/5] Set Domain ===
 echo ""
